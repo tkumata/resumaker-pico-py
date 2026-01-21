@@ -16,41 +16,77 @@ document.addEventListener("DOMContentLoaded", async () => {
   dateTime.innerHTML = getTodayFormatted();
 
   userInfo.innerHTML = `
-    <div class="user-image">
-      <img src="/image.jpg" alt="User" loading="lazy">
-    </div>
-    <p><label>名前</label><span class="user-name">${escapeHTML(user.usr_name)} (${escapeHTML(
+    <div class="profile-top">
+      <div class="user-image">
+        <img src="/image.jpg" alt="User" loading="lazy">
+      </div>
+      <dl>
+        <div class="field field-name">
+          <dt>名前</dt>
+          <dd class="user-name">${escapeHTML(user.usr_name)} (${escapeHTML(
     user.usr_name_kana
-  )})</span>
-    </p>
-    <p><label>住所</label>${escapeHTML(user.usr_addr)}</p>
-    <div class="personal-block">
-      <p><label>電話番号</label>${escapeHTML(user.usr_phone || "なし")}</p>
-      <p><label>携帯番号</label>${escapeHTML(user.usr_mobile)}</p>
-      <p><label>E メール</label>${escapeHTML(user.usr_email)}</p>
+  )})</dd>
+        </div>
+        <div class="field field-address">
+          <dt>住所</dt><dd>${escapeHTML(user.usr_addr)}</dd>
+        </div>
+      </dl>
+      <dl class="personal-block personal-contacts">
+        <div class="field"><dt>電話番号</dt><dd>${escapeHTML(
+          user.usr_phone || "なし"
+        )}</dd></div>
+        <div class="field"><dt>携帯番号</dt><dd>${escapeHTML(
+          user.usr_mobile
+        )}</dd></div>
+        <div class="field field-email"><dt>E メール</dt><dd>${escapeHTML(
+          user.usr_email
+        )}</dd></div>
+      </dl>
+      <dl class="personal-block personal-demographics">
+        <div class="field"><dt>生年月日</dt><dd>${escapeHTML(
+          user.usr_birthday
+        )}</dd></div>
+        <div class="field"><dt>年齢</dt><dd>満${escapeHTML(
+          user.usr_age
+        )}歳</dd></div>
+        <div class="field"><dt>性別</dt><dd>${
+          user.usr_gender === "1" ? "女" : "男"
+        }</dd></div>
+        <div class="field"><dt>扶養家族</dt><dd>${
+          user.usr_family === "1" ? "あり" : "なし"
+        }</dd></div>
+      </dl>
     </div>
-    <div class="personal-block">
-      <p><label>生年月日</label>${escapeHTML(user.usr_birthday)}</p>
-      <p><label>年齢</label>満${escapeHTML(user.usr_age)}歳</p>
-      <p><label>性別</label>${user.usr_gender === "1" ? "女" : "男"}</p>
-      <p><label>扶養家族</label>${user.usr_family === "1" ? "あり" : "なし"}</p>
-    </div>
-    <p><label>免許・資格</label>${escapeHTML(user.usr_licenses).replace(
-      /\n/g,
-      "<br>"
-    )}</p>
-    <div><label>特技</label>${parseMarkdown(user.usr_skill)}</div>
-    <div><label>志望動機</label>${parseMarkdown(user.usr_siboudouki)}</div>
-    <p><label>通勤時間</label>${escapeHTML(user.usr_access)}</p>
-    <div><label>趣味</label>${parseMarkdown(user.usr_hobby)}</div>
+    <dl>
+      <div class="field-block field-licenses">
+        <dt>免許・資格</dt><dd>${escapeHTML(user.usr_licenses).replace(
+          /\n/g,
+          "<br>"
+        )}</dd>
+      </div>
+      <div class="field-block field-skill">
+        <dt>特技</dt><dd>${parseMarkdown(user.usr_skill)}</dd>
+      </div>
+      <div class="field-block field-motivation">
+        <dt>志望動機</dt><dd>${parseMarkdown(user.usr_siboudouki)}</dd>
+      </div>
+      <div class="field-block field-access">
+        <dt>通勤時間</dt><dd>${escapeHTML(user.usr_access)}</dd>
+      </div>
+      <div class="field-block field-hobby">
+        <dt>趣味</dt><dd>${parseMarkdown(user.usr_hobby)}</dd>
+      </div>
+    </dl>
   `;
 
   simplehistInfo.innerHTML = `
-    <h2>学歴・職歴</h2>
-    <ul>
+    <ul class="history-list">
       ${simplehist
         .map(
-          (h) => `<li>${escapeHTML(h.hist_datetime)} ${escapeHTML(h.hist_status)}: ${escapeHTML(h.hist_name)}</li>`
+          (h) =>
+            `<li class="history-item">${escapeHTML(
+              h.hist_datetime
+            )} ${escapeHTML(h.hist_status)}: ${escapeHTML(h.hist_name)}</li>`
         )
         .join("")}
     </ul>
@@ -58,12 +94,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const jobhist = await (await fetch("/api/jobhist")).json();
   jobhistInfo.innerHTML = `
-    <h2>職務経歴</h2>
     ${jobhist
       .map(
         (j) => `
-          <h4>${escapeHTML(j.job_name)}</h4>
-          <div>${parseMarkdown(j.job_description)}</div>
+          <div class="job-entry">
+            <h4 class="job-title">${escapeHTML(j.job_name)}</h4>
+            <div class="job-detail">${parseMarkdown(j.job_description)}</div>
+          </div>
         `
       )
       .join("")}
@@ -71,12 +108,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const portrait = await (await fetch("/api/portrait")).json();
   portraitInfo.innerHTML = `
-    <h2>ポートレイト</h2>
     ${portrait
       .map(
         (p) => `
-          <h5>${escapeHTML(p.portrait_url)}</h5>
-          <div>${parseMarkdown(p.portrait_summary)}</div>
+          <div class="portrait-item">
+            <h5 class="portrait-title"><a target="_blank" href="${escapeHTML(
+              p.portrait_url
+            )}">${escapeHTML(p.portrait_url)}</a></h5>
+            <div class="portrait-body">${parseMarkdown(
+              p.portrait_summary
+            )}</div>
+          </div>
         `
       )
       .join("")}
@@ -93,13 +135,13 @@ function parseMarkdown(text) {
 
 function escapeHTML(text) {
   if (!text) return "";
-  return text.replace(/[&<>"']/g, function(match) {
+  return text.replace(/[&<>"']/g, function (match) {
     const escape = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;'
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
     };
     return escape[match];
   });
@@ -114,18 +156,12 @@ function getTodayFormatted() {
   return `${year}年${month}月${day}日 現在`;
 }
 
-function isInAdminNetwork(ip) {
-  const ipToNum = (ip) => {
-    return ip
+function ipToNum(ip) {
+  return (
+    ip
       .split(".")
-      .reduce((acc, octet) => (acc << 8) + parseInt(octet), 0);
-  };
-
-  const targetIp = ipToNum(ip);
-  const networkBase = ipToNum("192.168.11.0");
-  const subnetMask = 0xffffff00;
-
-  return (targetIp & subnetMask) === networkBase;
+      .reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0
+  );
 }
 
 // admin クラスの要素を表示/非表示にする関数
@@ -136,37 +172,48 @@ function toggleAdminElements(show) {
   });
 }
 
-function checkServerNetwork() {
+async function checkServerNetwork() {
   const currentHost = window.location.hostname;
-  const ipPattern =
-    /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  const adminNetworks = [];
 
-  if (ipPattern.test(currentHost)) {
-    if (isInAdminNetwork(currentHost)) {
-      toggleAdminElements(true);
-      return true;
-    } else {
-      toggleAdminElements(false);
-      return false;
-    }
-  } else {
-    const adminHostPatterns = [/^192\.168\.11\.\d+$/];
+  // Default AP network
+  adminNetworks.push({
+    base: ipToNum("192.168.4.0"),
+    mask: ipToNum("255.255.255.0"),
+  });
 
-    const isAdminHost = adminHostPatterns.some((pattern) => {
-      if (pattern instanceof RegExp) {
-        return pattern.test(currentHost);
+  try {
+    const res = await fetch("/api/network");
+    if (res.ok) {
+      const info = await res.json();
+      if (info.sta && info.sta.ip) {
+        const staIp = ipToNum(info.sta.ip);
+        const staMask = ipToNum(info.sta.netmask);
+        const staBase = staIp & staMask;
+        adminNetworks.push({
+          base: staBase,
+          mask: staMask,
+        });
       }
-      return currentHost === pattern;
-    });
-
-    if (isAdminHost) {
-      toggleAdminElements(true);
-      return true;
-    } else {
-      toggleAdminElements(false);
-      return false;
     }
+  } catch (e) {
+    console.warn("Failed to fetch network info", e);
   }
+
+  const isIp =
+    /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(
+      currentHost
+    );
+
+  let isAdmin = false;
+
+  if (isIp) {
+    const hostNum = ipToNum(currentHost);
+    isAdmin = adminNetworks.some((net) => (hostNum & net.mask) === net.base);
+  }
+
+  toggleAdminElements(isAdmin);
+  return isAdmin;
 }
 
 // ページロード時に実行

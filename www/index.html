@@ -7,20 +7,36 @@
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    <div class="admin">
-      <a href="/admin/user">プロフィール編集</a> |
-      <a href="/admin/simplehist">学歴・職歴編集</a> |
-      <a href="/admin/jobhist">職務経歴編集</a> |
-      <a href="/admin/portrait">ポートレイト編集</a>
-    </div>
-    <div class="container">
-      <h1>履 歴 書</h1>
-      <div id="datetime"></div>
-      <div id="user-info"></div>
-      <div id="simplehist-info"></div>
-      <div id="jobhist-info"></div>
-      <div id="portrait-info"></div>
-    </div>
+    <nav class="admin">
+      <ul>
+        <li><a href="/admin/user">プロフィール編集</a></li>
+        <li><a href="/admin/simplehist">学歴・職歴編集</a></li>
+        <li><a href="/admin/jobhist">職務経歴編集</a></li>
+        <li><a href="/admin/portrait">ポートレイト編集</a></li>
+      </ul>
+    </nav>
+    <main class="container resume">
+      <header class="resume-header">
+        <h1>履 歴 書</h1>
+        <div id="datetime" class="resume-date"></div>
+      </header>
+      <section class="resume-section resume-profile">
+        <h2 class="section-title">プロフィール</h2>
+        <div id="user-info"></div>
+      </section>
+      <section class="resume-section">
+        <h2 class="section-title">学歴・職歴</h2>
+        <div id="simplehist-info"></div>
+      </section>
+      <section class="resume-section">
+        <h2 class="section-title">職務経歴</h2>
+        <div id="jobhist-info"></div>
+      </section>
+      <section class="resume-section">
+        <h2 class="section-title">ポートレイト</h2>
+        <div id="portrait-info"></div>
+      </section>
+    </main>
   </body>
   <script src="/lib/marked.min.js"></script>
   <script src="/index.js"></script>

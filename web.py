@@ -25,9 +25,10 @@ class RefuseHttpsServer:
 
 
 class WebServer:
-    def __init__(self, storage):
+    def __init__(self, storage, sta=None):
         self.upload_headers = {}
         self.storage = storage
+        self.sta = sta
         self.routes = {
             "/": self.handle_index,
             "/hotspot-detect.html": self.handle_hotspot_detect,
@@ -41,6 +42,7 @@ class WebServer:
             "/api/jobhist": self.handle_api_jobhist,
             "/api/portrait": self.handle_api_portrait,
             "/api/upload": self.handle_image_upload,
+            "/api/network": self.handle_api_network,
         }
 
     async def start(self):
@@ -456,6 +458,30 @@ class WebServer:
 
     async def handle_api_portrait(self, method, data, writer):
         return await self.api_get_handler(method, self.storage.read_portrait, writer)
+
+    async def handle_api_network(self, method, data, writer):
+        if method != "GET":
+            return await self.send_chunked(writer, b"Method not allowed")
+
+        info = {
+            "ap": {
+                "ip": "192.168.4.1",
+                "netmask": "255.255.255.0"
+            },
+            "sta": None
+        }
+
+        if self.sta and self.sta.isconnected():
+            sta_if = self.sta.ifconfig()
+            info["sta"] = {
+                "ip": sta_if[0],
+                "netmask": sta_if[1],
+                "gateway": sta_if[2],
+                "dns": sta_if[3]
+            }
+
+        json_data = ujson.dumps(info)
+        return await self.send_chunked(writer, json_data.encode())
 
     async def handle_admin_log(self, method, data, writer):
         if method != "GET":

@@ -2,7 +2,7 @@
 
 Raspberry Pi Pico WH によるポータブル履歴書
 
-![screenshot](./docs/pico1w-resumaker.jpg)
+![screenshot](./docs/resumaker-pico-py.jpg)
 
 ## 概要
 
@@ -98,8 +98,8 @@ Raspberry Pi Pico WH によるポータブル履歴書
 ### 本ソフトウェア準備
 
 ```bash
-git clone git@github.com:tkumata/pico1w-resumaker.git
-cd pico1w-resumaker
+git clone git@github.com:tkumata/resumaker-pico-py.git
+cd resumaker-pico-py
 cp secrets.py.sample secrets.py
 vi secrets.py
 vi .vscode/settings.json

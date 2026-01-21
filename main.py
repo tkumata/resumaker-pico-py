@@ -26,7 +26,7 @@ display_controller = DisplayController()
 storage = Storage()
 
 # Initialize web server
-web_server = WebServer(storage)
+web_server = WebServer(storage, sta)
 refuse_server = RefuseHttpsServer()
 
 # Initialize dns server
