@@ -208,6 +208,16 @@ button {
 button:hover {
   background-color: #0056b3;
 }
+.error-message {
+  color: #c62828;
+  margin-top: 12px;
+}
+.auth-container {
+  margin-top: 10vh;
+}
+.auth-message {
+  margin-bottom: 16px;
+}
 p {
   margin-block: 0 1em;
 }

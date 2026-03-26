@@ -8,6 +8,14 @@
 
 ## 2. Web サーバー仕様 (`web.py`)
 
+### 2.0. 管理認証
+
+- 管理用パスワードは `secrets.ADMIN_PASSWORD` から取得する。
+- セッション Cookie 名は `admin_session` とする。
+- セッションは `token -> expires_at` の形式でメモリ保持する。
+- セッション有効期限は 30 分をデフォルトとし、認証済みアクセスのたびに延長する。
+- `ADMIN_PASSWORD` が空または未定義の場合、管理系エンドポイントは利用不可とする。
+
 ### 2.1. キャプティブポータル検知ロジック (`handle_client` 内)
 
 リクエスト処理の初期段階（ルーティング前）に以下のチェックを行う。
@@ -28,12 +36,43 @@
 
 ### 2.2. ルーティング優先順位
 
-1.  **API エンドポイント** (`/api/...`, `/admin/...`): 既存通り処理。
-2.  **静的ファイル** (`/`, `/index.html`, `/style.css` 等): 既存通り `www/` 以下のファイルを提供。
-3.  **キャプティブポータル判定**: 上記に当てはまらない、かつ `Host` が異なる、または特定の検知用パスの場合 -> **302 Redirect to root**。
-4.  **404 Not Found**: 上記いずれにも当てはまらず、ローカルファイルも存在しない場合。
+1.  **管理認証チェック**:
 
-### 2.3. レスポンスヘッダー
+    - `/admin/login` は未認証でもアクセス可。
+    - `/admin/logout` は認証済み時のみ有効。
+    - `/admin/*` と `/api/upload` と `/api/network` は認証必須。
+    - 未認証の GET は `/admin/login` へ 302 リダイレクト。
+    - 未認証の POST は `401 Unauthorized` を返す。
+
+2.  **API エンドポイント** (`/api/...`, `/admin/...`): 認証通過後に処理。
+3.  **静的ファイル** (`/`, `/index.html`, `/style.css` 等): 既存通り `www/` 以下のファイルを提供。
+4.  **キャプティブポータル判定**: 上記に当てはまらない、かつ `Host` が異なる、または特定の検知用パスの場合 -> **302 Redirect to root**。
+5.  **404 Not Found**: 上記いずれにも当てはまらず、ローカルファイルも存在しない場合。
+
+### 2.3. ログイン・ログアウト
+
+- `GET /admin/login`
+  - `www/admin-login.html` を返す。
+- `POST /admin/login`
+  - 入力 JSON は `{"password":"..."}`
+  - 成功時は `200 OK` と `Set-Cookie` を返す。
+  - 失敗時は `401 Unauthorized` を返す。
+- `POST /admin/logout`
+  - 成功時は `200 OK` と Cookie 削除ヘッダーを返す。
+
+### 2.4. 認証失敗時レスポンス
+
+- 未認証 GET `/admin/*`
+  - `302 Found`
+  - `Location: /admin/login`
+- 未認証 POST `/admin/*`, `/api/upload`, `/api/network`
+  - `401 Unauthorized`
+  - JSON: `{"status":"error","message":"認証が必要です"}`
+- 設定不足時
+  - `503 Service Unavailable`
+  - JSON: `{"status":"error","message":"管理認証が設定されていません"}`
+
+### 2.5. レスポンスヘッダー
 
 リダイレクト時のレスポンス:
 
@@ -48,3 +87,8 @@ Connection: close
 - `dns.py` のインポートのコメントアウトを解除。
 - `DNSServer` のインスタンス化 (`dns_server = DNSServer(ip=ap.ifconfig()[0])`) のコメントアウトを解除。
 - `asyncio.gather` 内の `dns_server.start()` のコメントアウトを解除。
+
+## 4. 設定追加 (`secrets.py`)
+
+- `ADMIN_PASSWORD = "..."` を追加する。
+- 必要に応じて `ADMIN_SESSION_TTL_SECONDS = 1800` を追加できるようにする。

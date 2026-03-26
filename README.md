@@ -114,7 +114,7 @@ vi .vscode/settings.json
 | STA_SSID     | SSID of your home Wi-Fi           |
 | STA_PASSWORD | Wi-Fi password of your home Wi-Fi |
 
-.vscode/settings.json で TTY の指定をします。Mac (M4 Macbook Air macOS Tahoe) の場合以下になります。
+`.vscode/settings.json` で TTY の指定をします。Mac (M4 Macbook Air macOS Tahoe) の場合以下になります。
 
 ```json
 "micropico.manualComDevice": "/dev/tty.usbmodem113201",
@@ -144,25 +144,25 @@ Linux (Debian 系) の場合以下になると思います。
 1. OLED に映った QR コードをスキャン
 2. ブラウザで以下にアクセス
 
-- http://192.168.4.1/admin/user
-- http://192.168.4.1/admin/simplehist
-- http://192.168.4.1/admin/jobhist
-- http://192.168.4.1/admin/portrait
+- <http://192.168.4.1/admin/user>
+- <http://192.168.4.1/admin/simplehist>
+- <http://192.168.4.1/admin/jobhist>
+- <http://192.168.4.1/admin/portrait>
 
 ### 履歴書表示
 
 1. OLED に映った QR コードをスキャン
-2. http://192.168.4.1 に接続
+2. <http://192.168.4.1> に接続
 
 ## 仕様
 
-- 履歴書データは、csv ファイルで以下の構成
+- 履歴書データは、`.csv` ファイルで以下の構成
   - user.csv: 個人情報を保存するファイル
   - jobhist.csv: 職務経歴書を保存するファイル
   - simplehist.csv: 1 行単位の学歴・職歴を保存するファイル
   - portrait.csv: ポートレイト情報を保存するファイル
-- /api/user: 個人情報を呼び出す・保存する API エンドポイント
-- /api/jobhist: 職務経歴書を呼び出す・保存する API エンドポイント
-- /api/simplehist: 1 行単位の学歴・職歴を呼び出す・保存する API エンドポイント
-- /api/portrait: ポートレイト情報を呼び出す・保存する API エンドポイント
-- /api/upload: 証明写真をアップロードする API エンドポイント
+- `/api/user`: 個人情報を呼び出す・保存する API エンドポイント
+- `/api/jobhist`: 職務経歴書を呼び出す・保存する API エンドポイント
+- `/api/simplehist`: 1 行単位の学歴・職歴を呼び出す・保存する API エンドポイント
+- `/api/portrait`: ポートレイト情報を呼び出す・保存する API エンドポイント
+- `/api/upload`: 証明写真をアップロードする API エンドポイント

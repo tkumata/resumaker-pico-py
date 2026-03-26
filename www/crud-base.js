@@ -95,6 +95,9 @@ class CrudBase {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(this.data),
       });
+      if (await handleAdminAuthError(response)) {
+        return;
+      }
       if (!response.ok) {
         console.error(
           "Failed to save data:",

@@ -2,7 +2,10 @@ import uasyncio as asyncio
 import ujson
 import os
 import gc
-import logger
+import time
+import ubinascii
+import secrets
+from lib import logger
 
 BUFFER_SIZE = 1024
 
@@ -29,9 +32,16 @@ class WebServer:
         self.upload_headers = {}
         self.storage = storage
         self.sta = sta
+        self.admin_password = getattr(secrets, "ADMIN_PASSWORD", "")
+        self.admin_session_ttl_ms = int(
+            getattr(secrets, "ADMIN_SESSION_TTL_SECONDS", 1800)) * 1000
+        self.admin_session_cookie = "admin_session"
+        self.admin_sessions = {}
         self.routes = {
             "/": self.handle_index,
             "/hotspot-detect.html": self.handle_hotspot_detect,
+            "/admin/login": self.handle_admin_login,
+            "/admin/logout": self.handle_admin_logout,
             "/admin/user": self.handle_user,
             "/admin/simplehist": self.handle_simplehist,
             "/admin/jobhist": self.handle_jobhist,
@@ -99,6 +109,10 @@ class WebServer:
                 return await self.send_redirect(writer, f"http://{my_ip}/")
             # ---------------------------
 
+            auth_error = await self.enforce_admin_auth(method, path, writer, custom_headers)
+            if auth_error:
+                return
+
             body = None
 
             if method == "POST" and content_length > 0:
@@ -117,12 +131,23 @@ class WebServer:
                     except (UnicodeError, ValueError):
                         return await self.send_error(writer, "400 Bad Request", "JSON Decode Error")
 
-            if method == "GET" and path in self.routes and path.startswith("/admin") and path != "/admin/log":
+            if path == "/admin/logout":
+                body = {"headers": custom_headers}
+
+            is_admin_get = (
+                method == "GET"
+                and path in self.routes
+                and path.startswith("/admin")
+                and path not in ("/admin/log", "/admin/login", "/admin/logout")
+            )
+            if is_admin_get:
                 return await self.serve_admin_static(writer, path)
             elif method == "GET" and path in ("/api/jobhist", "/api/portrait"):
                 return await self.serve_csv_as_json(writer, path)
             elif path in self.routes:
                 handler = self.routes[path]
+                if path in ("/admin/login", "/admin/logout"):
+                    return await handler(method, body, writer)
                 if path.startswith("/api/"):
                     content_type = "application/json"
                 elif path == "/admin/log":
@@ -218,7 +243,7 @@ class WebServer:
                     content_length = int(line_str.split(":", 1)[1].strip())
                 elif line_str.lower().startswith("expect: 100-continue"):
                     expect_continue = True
-                elif line_str.lower().startswith(("x-filename:", "x-final:", "host:")):
+                elif line_str.lower().startswith(("x-filename:", "x-final:", "host:", "cookie:")):
                     key, value = line_str.split(":", 1)
                     custom_headers[key.strip().lower()] = value.strip()
             except (UnicodeError, ValueError):
@@ -228,32 +253,133 @@ class WebServer:
     def parse_request_line(self, line):
         try:
             method, path, _ = line.split()
+            path = path.split("?", 1)[0]
             return method, path
         except ValueError:
             return None, None
 
-    async def send_response_header(self, writer, status, content_type):
-        header = (
-            f"HTTP/1.1 {status}\r\n"
-            f"Content-Type: {content_type}\r\n"
-            f"Connection: close\r\n\r\n"
-        ).encode()
+    def _build_header(self, status, content_type=None, extra_headers=None):
+        header = "HTTP/1.1 {}\r\n".format(status)
+        if content_type:
+            header += "Content-Type: {}\r\n".format(content_type)
+        if extra_headers:
+            for key, value in extra_headers:
+                header += "{}: {}\r\n".format(key, value)
+        header += "Connection: close\r\n\r\n"
+        return header.encode()
+
+    async def send_response_header(self, writer, status, content_type, extra_headers=None):
+        header = self._build_header(status, content_type, extra_headers)
         writer.write(header)
         await writer.drain()
 
-    async def send_error(self, writer, status, message):
-        await self.send_response_header(writer, status, "application/json")
+    async def send_error(self, writer, status, message, extra_headers=None):
+        await self.send_response_header(writer, status, "application/json", extra_headers)
         error_data = ujson.dumps({"status": "error", "message": message})
         await self.send_chunked(writer, error_data.encode())
 
-    async def send_redirect(self, writer, location):
-        header = (
-            f"HTTP/1.1 302 Found\r\n"
-            f"Location: {location}\r\n"
-            f"Connection: close\r\n\r\n"
-        ).encode()
+    async def send_redirect(self, writer, location, extra_headers=None):
+        headers = [("Location", location)]
+        if extra_headers:
+            headers.extend(extra_headers)
+        header = self._build_header("302 Found", None, headers)
         writer.write(header)
         await writer.drain()
+
+    def cleanup_admin_sessions(self):
+        now = time.ticks_ms()
+        expired_tokens = []
+        for token, expires_at in self.admin_sessions.items():
+            if time.ticks_diff(expires_at, now) <= 0:
+                expired_tokens.append(token)
+        for token in expired_tokens:
+            self.admin_sessions.pop(token, None)
+
+    def is_admin_auth_configured(self):
+        return bool(self.admin_password)
+
+    def is_admin_protected_path(self, path):
+        if path.startswith("/admin/") and path not in ("/admin/login", "/admin/logout"):
+            return True
+        return path in ("/api/upload", "/api/network")
+
+    def parse_cookies(self, cookie_header):
+        cookies = {}
+        if not cookie_header:
+            return cookies
+        for item in cookie_header.split(";"):
+            if "=" not in item:
+                continue
+            key, value = item.split("=", 1)
+            cookies[key.strip()] = value.strip()
+        return cookies
+
+    def issue_admin_session(self):
+        try:
+            token = ubinascii.hexlify(os.urandom(16)).decode()
+        except AttributeError:
+            token = "{}{}".format(time.ticks_ms(), len(self.admin_sessions))
+        self.admin_sessions[token] = time.ticks_add(
+            time.ticks_ms(), self.admin_session_ttl_ms)
+        return token
+
+    def get_valid_admin_session(self, custom_headers):
+        self.cleanup_admin_sessions()
+        cookie_header = custom_headers.get("cookie", "")
+        token = self.parse_cookies(cookie_header).get(
+            self.admin_session_cookie)
+        if not token:
+            return None
+        expires_at = self.admin_sessions.get(token)
+        if expires_at is None:
+            return None
+        if time.ticks_diff(expires_at, time.ticks_ms()) <= 0:
+            self.admin_sessions.pop(token, None)
+            return None
+        self.admin_sessions[token] = time.ticks_add(
+            time.ticks_ms(), self.admin_session_ttl_ms)
+        return token
+
+    def build_admin_session_cookie(self, token, max_age=None):
+        parts = [
+            "{}={}".format(self.admin_session_cookie, token),
+            "Path=/",
+            "HttpOnly",
+            "SameSite=Strict"
+        ]
+        if max_age is not None:
+            parts.append("Max-Age={}".format(max_age))
+        return "; ".join(parts)
+
+    async def enforce_admin_auth(self, method, path, writer, custom_headers):
+        if path == "/admin/login":
+            if method == "GET" and self.get_valid_admin_session(custom_headers):
+                await self.send_redirect(writer, "/admin/user")
+                return True
+            return False
+
+        if path == "/admin/logout":
+            if not self.is_admin_auth_configured():
+                await self.send_error(writer, "503 Service Unavailable", "管理認証が設定されていません")
+                return True
+            return False
+
+        if not self.is_admin_protected_path(path):
+            return False
+
+        if not self.is_admin_auth_configured():
+            await self.send_error(writer, "503 Service Unavailable", "管理認証が設定されていません")
+            return True
+
+        if self.get_valid_admin_session(custom_headers):
+            return False
+
+        if method == "GET" and path.startswith("/admin/"):
+            await self.send_redirect(writer, "/admin/login")
+            return True
+
+        await self.send_error(writer, "401 Unauthorized", "認証が必要です")
+        return True
 
     async def send_chunked(self, writer, data):
         chunk_size = BUFFER_SIZE
@@ -417,6 +543,52 @@ class WebServer:
 
     async def handle_hotspot_detect(self, method, data, writer):
         return await self.stream_file(writer, "www/hotspot-detect.html")
+
+    async def handle_admin_login(self, method, data, writer):
+        if method == "GET":
+            await self.send_response_header(writer, "200 OK", "text/html")
+            return await self.stream_file(writer, "www/admin-login.html")
+
+        if method != "POST":
+            return await self.send_error(writer, "405 Method Not Allowed", "許可されていないメソッドです")
+
+        if not self.is_admin_auth_configured():
+            return await self.send_error(writer, "503 Service Unavailable", "管理認証が設定されていません")
+
+        password = ""
+        if data:
+            password = data.get("password", "")
+
+        if password != self.admin_password:
+            return await self.send_error(writer, "401 Unauthorized", "認証に失敗しました")
+
+        token = self.issue_admin_session()
+        cookie = self.build_admin_session_cookie(
+            token, max_age=self.admin_session_ttl_ms // 1000)
+        await self.send_response_header(
+            writer,
+            "200 OK",
+            "application/json",
+            [("Set-Cookie", cookie)]
+        )
+        success_msg = ujson.dumps({"status": "success"})
+        return await self.send_chunked(writer, success_msg.encode())
+
+    async def handle_admin_logout(self, method, data, writer):
+        if method != "POST":
+            return await self.send_error(writer, "405 Method Not Allowed", "許可されていないメソッドです")
+
+        token = self.parse_cookies(
+            (data or {}).get("headers", {}).get("cookie", "")
+        ).get(self.admin_session_cookie)
+        if token:
+            self.admin_sessions.pop(token, None)
+
+        success_headers = [
+            ("Set-Cookie", self.build_admin_session_cookie("", max_age=0))]
+        await self.send_response_header(writer, "200 OK", "application/json", success_headers)
+        success_msg = ujson.dumps({"status": "success"})
+        return await self.send_chunked(writer, success_msg.encode())
 
     async def html_post_handler(self, method, data, filepath, write_func, writer):
         if method == "GET":
