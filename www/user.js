@@ -57,6 +57,9 @@ async function saveUser() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
+    if (await handleAdminAuthError(response)) {
+      return;
+    }
     if (!response.ok) {
       console.error(
         "Failed to save user data:",
@@ -113,6 +116,9 @@ async function uploadImage() {
         headers,
         body: chunk,
       });
+      if (await handleAdminAuthError(response)) {
+        return;
+      }
 
       const result = await response.json();
       console.log(`Chunk ${i + 1}/${totalChunks}:`, result);

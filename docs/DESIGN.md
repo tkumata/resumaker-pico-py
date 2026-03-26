@@ -24,6 +24,27 @@ DNS サーバーで全てのトラフィックを自身に向け、Web サーバ
 
 - `DNSServer` のインスタンス化と `asyncio` ループへの組み込みを行う。
 
+### 4. 管理認証 (`web.py`, `www/admin-login.html`, `www/admin-login.js`)
+
+- `web.py` に管理セッション管理を追加する。
+- 管理用パスワードは `secrets.py` から読み込む。
+- ログイン成功時はランダムなセッショントークンを生成し、サーバーメモリに有効期限付きで保持する。
+- ブラウザには `Set-Cookie` でセッショントークンを返し、以後の管理系アクセス時に Cookie を検証する。
+- GET の `/admin/login` はログイン画面を返す。
+- POST の `/admin/login` はパスワードを検証し、成功時は Cookie 発行、失敗時は 401 を返す。
+- POST の `/admin/logout` はセッションを破棄し、Cookie を削除する。
+- `/admin/log` を含む `/admin/*` は、`/admin/login` と `/admin/logout` を除いて認証必須とする。
+- `/api/upload` と `/api/network` は管理操作に属するため、同じ認証チェックを適用する。
+
+#### 認証フロー
+
+1. 未認証ユーザーが `/admin/user` などへアクセスする。
+2. `web.py` が Cookie を検査し、有効なセッションがなければ `/admin/login` へ 302 リダイレクトする。
+3. ログイン画面の JavaScript が `/admin/login` にパスワードを POST する。
+4. 認証成功時、`web.py` がセッショントークンを発行して Cookie を返す。
+5. ブラウザは後続リクエストで Cookie を送信し、管理画面や保存処理が許可される。
+6. ログアウト時は `/admin/logout` に POST し、サーバー側セッションと Cookie を破棄する。
+
 ## シーケンス
 
 1. **Wi-Fi 接続**: ユーザー端末が Pico W の AP に接続。
@@ -49,3 +70,5 @@ DNS サーバーで全てのトラフィックを自身に向け、Web サーバ
 - **Android**: `generate_204` に対してリダイレクトを返すとポータルとして認識されることが多い。
 - **iOS**: `hotspot-detect.html` へのアクセスに対し、"Success" という文字列**以外**を含む HTML (ポータルページ) を返すと、ポータル画面が開く。
 - **Windows**: `ncsi.txt` へのアクセスに対し、期待するテキスト以外を返すとポータルと認識する。
+- 管理セッションは永続化せず、再起動で全失効とする。
+- HTTPS は前提にしないため、Cookie の `Secure` 属性は付与しない。

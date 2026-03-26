@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>管理ログイン</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="container auth-container">
+      <h1>管理ログイン</h1>
+      <p class="auth-message">
+        管理画面へ入るには、管理用パスワードを入力してください。
+      </p>
+      <form id="admin-login-form">
+        <label>
+          パスワード
+          <input
+            type="password"
+            name="password"
+            autocomplete="current-password"
+            required
+          />
+        </label>
+        <button type="submit">ログインする</button>
+      </form>
+      <p id="login-error" class="error-message" hidden></p>
+      <a href="/">公開ページへ戻る</a>
+    </div>
+    <script src="/admin-login.js"></script>
+  </body>
+</html>

@@ -17,3 +17,11 @@
   - 志望動機 (`usr_siboudouki`)
   - 趣味 (`usr_hobby`)
   - 特技 (`usr_skill`)
+
+## 管理画面認証
+
+- [x] `secrets.py.sample` に管理用パスワード設定を追加。
+- [x] `web.py` に `/admin/login` `/admin/logout` とセッション認証を追加。
+- [x] `/admin/*` と管理用 API の未認証アクセスを遮断。
+- [x] `www/` にログイン画面と未認証時の導線を追加。
+- [ ] 実機でログイン、未認証拒否、ログアウトを確認。
