@@ -12,8 +12,18 @@ class Storage:
     ]
 
     # 改行をBRタグに置換するキーのセット
-    KEYS_TO_REPLACE = {"usr_licenses",
-                       "usr_siboudouki", "usr_hobby", "usr_skill"}
+    KEYS_TO_REPLACE = {
+        "usr_licenses",
+        "usr_siboudouki",
+        "usr_hobby",
+        "usr_skill",
+        "job_description",
+        "portrait_summary",
+    }
+    SIMPLEHIST_FIELDS = ("hist_no", "hist_datetime",
+                         "hist_status", "hist_name")
+    JOBHIST_FIELDS = ("job_no", "job_name", "job_description")
+    PORTRAIT_FIELDS = ("portrait_no", "portrait_url", "portrait_summary")
 
     def __init__(self):
         self.data_dir = "/data"
@@ -40,29 +50,20 @@ class Storage:
             return {}
 
     def write_user(self, data):
-        values = [self._sanitize_value(key, data.get(key, ""))
-                  for key in self.USER_KEYS]
-        # user.csv の各フィールドからカンマを除去（または置換）
-        safe_values = [v.replace(",", "、") for v in values]
-        self._safe_write_lines(self.user_file, [",".join(safe_values)])
+        record = self._build_record(data, self.USER_KEYS)
+        self._safe_write_lines(
+            self.user_file, [self._join_record(self.USER_KEYS, record)])
 
     def read_simplehist(self):
         return self._read_csv_with_fields(
             self.simplehist_file,
-            ("hist_no", "hist_datetime", "hist_status", "hist_name")
+            self.SIMPLEHIST_FIELDS
         )
 
     def write_simplehist(self, data):
-        lines = []
-        for entry in data:
-            # カンマを置換してCSV構造を保護
-            datetime = str(entry['hist_datetime']).replace(",", "、")
-            status = str(entry['hist_status']).replace(",", "、")
-            name = str(entry['hist_name']).replace(",", "、")
-            lines.append(f"{entry['hist_no']},{datetime},{status},{name}")
-        
         gc.collect()
-        self._safe_write_lines(self.simplehist_file, lines)
+        self._write_csv_records(self.simplehist_file,
+                                data, self.SIMPLEHIST_FIELDS)
 
     def _read_csv_with_fields(self, filepath, field_names):
         """
@@ -102,39 +103,25 @@ class Storage:
     def read_jobhist(self):
         return self._read_csv_with_fields(
             self.jobhist_file,
-            ("job_no", "job_name", "job_description")
+            self.JOBHIST_FIELDS
         )
 
     def write_jobhist(self, data):
         if not data:
             return
 
-        def iter_lines():
-            for entry in data:
-                job_no = entry.get("job_no", 0)
-                job_name = str(entry.get("job_name", "")).replace(",", "、")
-                desc = str(entry.get("job_description", "")).replace(
-                    "\n", "<br>").replace(",", "、")
-                yield "{},{},{}".format(job_no, job_name, desc)
-
         gc.collect()
-        self._safe_write_lines(self.jobhist_file, iter_lines())
+        self._write_csv_records(self.jobhist_file, data, self.JOBHIST_FIELDS)
 
     def read_portrait(self):
         return self._read_csv_with_fields(
             self.portrait_file,
-            ("portrait_no", "portrait_url", "portrait_summary")
+            self.PORTRAIT_FIELDS
         )
 
     def write_portrait(self, data):
-        lines = []
-        for entry in data:
-            url = str(entry['portrait_url']).replace(",", "、")
-            summary = str(entry['portrait_summary']).replace("\n", "<br>").replace(",", "、")
-            lines.append(f"{entry['portrait_no']},{url},{summary}")
-        
         gc.collect()
-        self._safe_write_lines(self.portrait_file, lines)
+        self._write_csv_records(self.portrait_file, data, self.PORTRAIT_FIELDS)
 
     def _safe_write_lines(self, filepath, lines):
         temp_path = filepath + ".tmp"
@@ -157,6 +144,29 @@ class Storage:
             except OSError:
                 pass
             raise
+
+    def _write_csv_records(self, filepath, data, field_names):
+        def iter_lines():
+            for entry in data:
+                record = self._build_record(entry, field_names)
+                yield self._join_record(field_names, record)
+
+        self._safe_write_lines(filepath, iter_lines())
+
+    def _build_record(self, data, field_names):
+        record = {}
+        for field in field_names:
+            record[field] = self._sanitize_value(field, data.get(field, ""))
+        return record
+
+    def _join_record(self, field_names, record):
+        values = []
+        for field in field_names:
+            values.append(self._escape_csv_value(record.get(field, "")))
+        return ",".join(values)
+
+    def _escape_csv_value(self, value):
+        return str(value).replace(",", "、")
 
     def _sanitize_value(self, key, value):
         if value is None:
