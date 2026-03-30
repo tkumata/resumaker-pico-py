@@ -20,7 +20,7 @@
 - 管理用パスワードは `secrets.ADMIN_PASSWORD` から取得する。
 - セッション Cookie 名は `admin_session` とする。
 - セッションは `token -> expires_at` の形式でメモリ保持する。
-- セッション有効期限は 30 分をデフォルトとし、認証済みアクセスのたびに延長する。
+- セッション有効期限は 120 分をデフォルトとし、認証済みアクセスのたびに延長する。
 - `ADMIN_PASSWORD` が空または未定義の場合、管理系エンドポイントは利用不可とする。
 
 ### 2.1. キャプティブポータル検知ロジック (`handle_client` 内)
@@ -98,4 +98,4 @@ Connection: close
 ## 4. 設定追加 (`secrets.py`)
 
 - `ADMIN_PASSWORD = "..."` を追加する。
-- 必要に応じて `ADMIN_SESSION_TTL_SECONDS = 1800` を追加できるようにする。
+- 必要に応じて `ADMIN_SESSION_TTL_SECONDS = 7200` を追加できるようにする。

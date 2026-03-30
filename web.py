@@ -8,6 +8,13 @@ import secrets
 from lib import logger
 
 BUFFER_SIZE = 1024
+AP_IP = "192.168.4.1"
+CAPTIVE_PORTAL_PATHS = (
+    "/generate_204",
+    "/gen_204",
+    "/ncsi.txt",
+    "/hotspot-detect.html",
+)
 
 
 class RefuseHttpsServer:
@@ -29,12 +36,12 @@ class RefuseHttpsServer:
 
 class WebServer:
     def __init__(self, storage, sta=None):
-        self.upload_headers = {}
         self.storage = storage
         self.sta = sta
+        self.ap_ip = AP_IP
         self.admin_password = getattr(secrets, "ADMIN_PASSWORD", "")
         self.admin_session_ttl_ms = int(
-            getattr(secrets, "ADMIN_SESSION_TTL_SECONDS", 1800)) * 1000
+            getattr(secrets, "ADMIN_SESSION_TTL_SECONDS", 7200)) * 1000
         self.admin_session_cookie = "admin_session"
         self.admin_sessions = {}
         self.routes = {
@@ -75,91 +82,20 @@ class WebServer:
             if expect_continue:
                 await self.send_continue(writer)
 
-            # --- Captive Portal Logic ---
-            # Check Host header and Path to detect captive portal probes
-            host = custom_headers.get('host', '').split(':')[0]
-            my_ip = "192.168.4.1"
-
-            # Common captive portal detection paths
-            # Android: /generate_204, /gen_204
-            # Windows: /ncsi.txt
-            # iOS/macOS: /hotspot-detect.html (though we also have a route for this)
-            captive_paths = ["/generate_204", "/gen_204",
-                             "/ncsi.txt", "/hotspot-detect.html"]
-
-            should_redirect = False
-
-            # Check if host is a domain name (contains letters) -> Redirect
-            # If it's an IP (e.g. 192.168.10.5 or 192.168.4.1), allow it.
-            is_ip = True
-            if host:
-                parts = host.split('.')
-                for p in parts:
-                    if not p.isdigit():
-                        is_ip = False
-                        break
-
-            if host and not is_ip:
-                should_redirect = True
-            # Redirect specific connectivity check paths
-            elif path in captive_paths:
-                should_redirect = True
-
-            if should_redirect:
-                return await self.send_redirect(writer, f"http://{my_ip}/")
-            # ---------------------------
+            if self.should_redirect_captive_portal(path, custom_headers):
+                return await self.send_redirect(writer, self.get_root_url())
 
             auth_error = await self.enforce_admin_auth(method, path, writer, custom_headers)
             if auth_error:
                 return
 
-            body = None
-
-            if method == "POST" and content_length > 0:
-                if path == "/api/upload":
-                    # Pass reader and length to handler for chunked processing
-                    self.upload_headers = custom_headers
-                    body = {"reader": reader, "content_length": content_length}
-                else:
-                    try:
-                        success = await self.write_temp_file(reader, content_length)
-                        if not success:
-                            return await self.send_error(writer, "500 Internal Server Error", "File Write Error")
-                        body = self.load_json_from_file()
-                        if body is None:
-                            return await self.send_error(writer, "400 Bad Request", "JSON Decode Error")
-                    except (UnicodeError, ValueError):
-                        return await self.send_error(writer, "400 Bad Request", "JSON Decode Error")
-
-            if path == "/admin/logout":
-                body = {"headers": custom_headers}
-
-            is_admin_get = (
-                method == "GET"
-                and path in self.routes
-                and path.startswith("/admin")
-                and path not in ("/admin/log", "/admin/login", "/admin/logout")
+            body, should_stop = await self.prepare_request_body(
+                method, path, reader, content_length, custom_headers, writer
             )
-            if is_admin_get:
-                return await self.serve_admin_static(writer, path)
-            elif method == "GET" and path in ("/api/jobhist", "/api/portrait"):
-                return await self.serve_csv_as_json(writer, path)
-            elif path in self.routes:
-                handler = self.routes[path]
-                if path in ("/admin/login", "/admin/logout"):
-                    return await handler(method, body, writer)
-                if path.startswith("/api/"):
-                    content_type = "application/json"
-                elif path == "/admin/log":
-                    content_type = "text/plain"
-                else:
-                    content_type = "text/html"
-                await self.send_response_header(writer, "200 OK", content_type)
-                await handler(method, body, writer)
-            else:
-                return await self.serve_static_file(writer, path)
+            if should_stop:
+                return
 
-            del body
+            return await self.dispatch_request(method, path, body, writer)
 
         except MemoryError as error:
             logger.error("handle_client memory error: {}".format(error))
@@ -191,8 +127,87 @@ class WebServer:
                 await self.safe_close(writer)
                 del writer
 
+    def should_redirect_captive_portal(self, path, custom_headers):
+        host = custom_headers.get("host", "").split(":", 1)[0]
+        if host and not self.is_ipv4_host(host):
+            return True
+        return path in CAPTIVE_PORTAL_PATHS
+
+    def get_root_url(self):
+        return "http://{}/".format(self.ap_ip)
+
+    def is_ipv4_host(self, host):
+        parts = host.split(".")
+        if len(parts) != 4:
+            return False
+        for part in parts:
+            if not part.isdigit():
+                return False
+        return True
+
+    async def prepare_request_body(self, method, path, reader, content_length, custom_headers, writer):
+        if path == "/admin/logout":
+            return {"headers": custom_headers}, False
+
+        if method != "POST" or content_length <= 0:
+            return None, False
+
+        if path == "/api/upload":
+            return {
+                "reader": reader,
+                "content_length": content_length,
+                "headers": custom_headers,
+            }, False
+
+        try:
+            success = await self.write_temp_file(reader, content_length)
+            if not success:
+                await self.send_error(writer, "500 Internal Server Error", "File Write Error")
+                return None, True
+            body = self.load_json_from_file()
+            if body is None:
+                await self.send_error(writer, "400 Bad Request", "JSON Decode Error")
+                return None, True
+            return body, False
+        except (UnicodeError, ValueError):
+            await self.send_error(writer, "400 Bad Request", "JSON Decode Error")
+            return None, True
+
+    async def dispatch_request(self, method, path, body, writer):
+        if self.is_admin_get_request(method, path):
+            return await self.serve_admin_static(writer, path)
+        if method == "GET" and path in ("/api/jobhist", "/api/portrait"):
+            return await self.serve_csv_as_json(writer, path)
+        if path in self.routes:
+            return await self.dispatch_route(method, path, body, writer)
+        return await self.serve_static_file(writer, path)
+
+    def is_admin_get_request(self, method, path):
+        return (
+            method == "GET"
+            and path in self.routes
+            and path.startswith("/admin")
+            and path not in ("/admin/log", "/admin/login", "/admin/logout")
+        )
+
+    async def dispatch_route(self, method, path, body, writer):
+        handler = self.routes[path]
+        if path in ("/admin/login", "/admin/logout"):
+            return await handler(method, body, writer)
+        content_type = self.get_route_content_type(path)
+        await self.send_response_header(writer, "200 OK", content_type)
+        return await handler(method, body, writer)
+
+    def get_route_content_type(self, path):
+        if path.startswith("/api/"):
+            return "application/json"
+        if path == "/admin/log":
+            return "text/plain"
+        return "text/html"
+
     async def safe_close(self, writer):
         try:
+            writer.close()
             await writer.wait_closed()
         except Exception:
             pass
@@ -489,8 +504,9 @@ class WebServer:
                 {"status": "error", "message": "Method not allowed"})
             return await self.send_chunked(writer, error_msg.encode())
 
-        filename = self.upload_headers.get("x-filename", "tmp.jpg")
-        is_final = self.upload_headers.get(
+        headers = (data or {}).get("headers", {})
+        filename = headers.get("x-filename", "tmp.jpg")
+        is_final = headers.get(
             "x-final", "false").lower() == "true"
 
         # data is {"reader": reader, "content_length": content_length}
@@ -637,7 +653,7 @@ class WebServer:
 
         info = {
             "ap": {
-                "ip": "192.168.4.1",
+                "ip": self.ap_ip,
                 "netmask": "255.255.255.0"
             },
             "sta": None
