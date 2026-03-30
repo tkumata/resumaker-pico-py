@@ -113,6 +113,8 @@ vi .vscode/settings.json
 | PASSWORD     | Wi-Fi password when Wi-Fi AP mode |
 | STA_SSID     | SSID of your home Wi-Fi           |
 | STA_PASSWORD | Wi-Fi password of your home Wi-Fi |
+| ADMIN_PASSWORD | 管理画面ログイン用パスワード |
+| ADMIN_SESSION_TTL_SECONDS | 管理セッション有効時間（秒、既定 7200） |
 
 `.vscode/settings.json` で TTY の指定をします。Mac (M4 Macbook Air macOS Tahoe) の場合以下になります。
 

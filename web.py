@@ -41,7 +41,7 @@ class WebServer:
         self.ap_ip = AP_IP
         self.admin_password = getattr(secrets, "ADMIN_PASSWORD", "")
         self.admin_session_ttl_ms = int(
-            getattr(secrets, "ADMIN_SESSION_TTL_SECONDS", 1800)) * 1000
+            getattr(secrets, "ADMIN_SESSION_TTL_SECONDS", 7200)) * 1000
         self.admin_session_cookie = "admin_session"
         self.admin_sessions = {}
         self.routes = {
